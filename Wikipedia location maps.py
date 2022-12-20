@@ -31,7 +31,7 @@ src_claim.setTarget(src_target)
 
 def wikiitemsearch(label):
     params = {'action': 'wbsearchentities', 'format': 'json',
-              'language': 'en', 'type': 'item', 'limit':1,
+              'language': 'en', 'type': 'item',
               'search': label}
     request = api.Request(site=site, parameters=params)
     result = request.submit()['search']
@@ -42,7 +42,6 @@ def wikiitemsearch(label):
         else:
             return result[0]['id']
     return None
-
 
 def create_item(site, label_dict):
     new_item = pywikibot.ItemPage(site)
