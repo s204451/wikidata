@@ -1,5 +1,6 @@
 import pywikibot
 from pywikibot.data import api
+from pywikibot import pagegenerators as pg
 
 wikipedia_site = pywikibot.Site("en", "wikipedia")
 site = pywikibot.Site("wikidata", "wikidata")
@@ -49,49 +50,75 @@ def create_item(site, label_dict):
     return new_item.getID()
 
 
-for page_name in page_names:
-    item_id = wikiitemsearch(page_name)
-    if item_id:
-        item = pywikibot.ItemPage(repo, item_id)
-        item_dict = item.get()
-        claim_dict = item_dict["claims"]
-        if not prop_id in claim_dict:
-            print(f"Adding prop to {page_name}")
-            item.addClaim(new_claim)
-        else:
-            claim_list = claim_dict[prop_id]
-            val_found = False
-            val_parent_found = False
-            for claim in claim_list:
-                target = claim.getTarget()
-                if target.id == prop_val:
-                    val_found = True
-                    break
-                elif target.id == prop_val_parent:
-                    val_parent_found = True
-            if val_found:
-                print(f"{page_name} is already ok")
-                continue
-            if val_parent_found:
-                print(f"Changing {page_name} to sub prop")
-                claim.changeTarget(claim_target, summary="Wikimedia module > map data module")
-                #claim.addSource(src_claim)
-            else:
+def process_page_names():
+    for page_name in page_names:
+        item_id = wikiitemsearch(page_name)
+        if item_id:
+            item = pywikibot.ItemPage(repo, item_id)
+            item_dict = item.get()
+            claim_dict = item_dict["claims"]
+            if not prop_id in claim_dict:
                 print(f"Adding prop to {page_name}")
                 item.addClaim(new_claim)
-                #new_claim.addSource(src_claim)
+            else:
+                claim_list = claim_dict[prop_id]
+                val_found = False
+                parent_claim = None # If parent claim is found this is changed to sub claim instead of adding a new claim
+                for claim in claim_list:
+                    target = claim.getTarget()
+                    if target.id == prop_val:
+                        val_found = True
+                        break
+                    elif target.id == prop_val_parent:
+                        parent_claim = claim
+                if val_found:
+                    print(f"{page_name} is already ok")
+                    continue
+                if val_parent_found:
+                    print(f"Changing {page_name} to sub prop")
+                    parent_claim.changeTarget(claim_target, summary="Wikimedia module > map data module")
+                    #claim.addSource(src_claim)
+                else:
+                    print(f"Adding prop to {page_name}")
+                    item.addClaim(new_claim)
+                    #new_claim.addSource(src_claim)
 
-    else:
-        test_page = pywikibot.Page(wikipedia_site, page_name)
-        if test_page.exists():
-            test_item = pywikibot.ItemPage.fromPage(test_page)
-            print(f"'{page_name}' exists with the id '{test_item.id}'")
         else:
-            print(f"{page_name} not found on Wikidata")
-            # labels = {"en": page_name}
-            # new_item_id = create_item(site, labels)
-            # new_item = pywikibot.ItemPage(repo, new_item_id)
-            # item.addClaim(new_claim)
-            # # new_claim.addSource(src_claim)
-            # sitedict = {'site':'enwiki', 'title':page_name}
-            # new_item.setSitelink(sitedict)
+            test_page = pywikibot.Page(wikipedia_site, page_name)
+            if test_page.exists():
+                test_item = pywikibot.ItemPage.fromPage(test_page)
+                print(f"'{page_name}' exists with the id '{test_item.id}'")
+            else:
+                print(f"{page_name} not found on Wikidata")
+                # labels = {"en": page_name}
+                # new_item_id = create_item(site, labels)
+                # new_item = pywikibot.ItemPage(repo, new_item_id)
+                # item.addClaim(new_claim)
+                # # new_claim.addSource(src_claim)
+                # sitedict = {'site':'enwiki', 'title':page_name}
+                # new_item.setSitelink(sitedict)
+
+
+# Checks all "Wikimedia module" items if they should be converted to subclass "map data module"
+def process_parent_prop():
+    wdq = 'SELECT DISTINCT ?item WHERE { ?item wdt:P31 wd:Q15184295 . FILTER NOT EXISTS { ?item wdt:P31 wd:Q18711811 . } } LIMIT 10'
+    generator = pg.WikidataSPARQLPageGenerator(wdq, site=site)
+    for page in generator:
+        item_dict = page.get()
+        if 'enwiki' in item_dict["sitelinks"]:
+            label = item_dict["sitelinks"]['enwiki'].title
+            if label.startswith('Location map/data/'):
+                claim_list = item_dict["claims"][prop_id]
+
+                for claim in claim_list:
+                    trgt = claim.getTarget()
+                    if trgt.id == prop_val_parent:
+                        print(f"Changing {label} ({page.id})")
+                        claim.changeTarget(claim_target, summary="Wikimedia module > map data module")
+                        break
+
+
+
+if __name__ == "__main__":
+    # process_page_names()
+    process_parent_prop()
